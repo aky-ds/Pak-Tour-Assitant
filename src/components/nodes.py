@@ -1,3 +1,4 @@
+import os
 from dotenv import load_dotenv
 
 from langchain_core.messages import (
@@ -8,9 +9,8 @@ from langchain_core.messages import (
 
 from langchain_groq import ChatGroq
 
-from states import TravelState
+from src.components.states import TravelState
 from src.components.Mtools import tavily_search
-import os
 
 load_dotenv()
 
@@ -18,7 +18,6 @@ llm = ChatGroq(
     model="llama-3.3-70b-versatile",
     api_key=os.getenv("GROQ_API_KEY")
 )
-
 
 PAKISTAN_CITIES = [
     "Hunza",
@@ -34,7 +33,7 @@ PAKISTAN_CITIES = [
 
 
 # ─────────────────────────────────────────────
-# TOURISM AGENT
+# TOURISM AGENT (Step 1 only)
 # ─────────────────────────────────────────────
 def tourism_agent(state: TravelState):
 
@@ -45,88 +44,28 @@ def tourism_agent(state: TravelState):
 
     tourism_results = tavily_search(query)
 
-    city_text = " ".join(
-        [f"- {city}" for city in PAKISTAN_CITIES]
-    )
+    city_list = "\n".join([f"- {c}" for c in PAKISTAN_CITIES])
 
     return {
         "suggested_places": PAKISTAN_CITIES,
+        "tourism_results": tourism_results,
         "messages": [
-            AIMessage(
-                content=f"""
-# 🇵🇰 Pakistan Tourism Suggestions
+            AIMessage(content=f"""
+🇵🇰 Pakistan Tourism Suggestions
 
-Popular tourism cities:
-
-{city_text}
+{city_list}
 
 ---
-
-Tourism Search Results:
 
 {tourism_results}
 
----
-
-Please type the city name you want to visit.
-"""
-            )
+👉 Select a city to continue planning.
+""")
         ],
         "llm_calls": state.get("llm_calls", 0) + 1,
     }
 
 
-# ─────────────────────────────────────────────
-# CITY SELECTION AGENT
-# ─────────────────────────────────────────────
-def city_selection_agent(state: TravelState):
-
-    latest_message = state["messages"][-1].content.strip()
-
-    matched_city = None
-
-    for city in PAKISTAN_CITIES:
-
-        if city.lower() in latest_message.lower():
-            matched_city = city
-            break
-
-    # Invalid city
-    if not matched_city:
-
-        city_text = " ".join(
-            [f"- {city}" for city in PAKISTAN_CITIES]
-        )
-
-        return {
-            "messages": [
-                AIMessage(
-                    content=f"""
-❌ Please select a valid city.
-
-Available cities:
-
-{city_text}
-"""
-                )
-            ]
-        }
-
-    return {
-        "selected_city": matched_city,
-        "messages": [
-            AIMessage(
-                content=f"""
-✅ Great choice.
-
-Planning your Pakistan trip to:
-
-# {matched_city}
-"""
-            )
-        ],
-        "llm_calls": state.get("llm_calls", 0) + 1,
-    }
 # ─────────────────────────────────────────────
 # BUS ROUTE AGENT
 # ─────────────────────────────────────────────
@@ -135,30 +74,24 @@ def bus_route_agent(state: TravelState):
     city = state["selected_city"]
 
     query = f"""
-    Best bus routes to {city} Pakistan.
+    Best bus routes from major cities to {city}, Pakistan.
 
     Include:
     - Faisal Movers
     - Daewoo Express
     - Niazi Express
-
-    Also include:
     - Ticket prices
-    - Travel duration
-    - Departure cities
+    - Duration
     """
 
     routes = tavily_search(query)
 
     return {
         "bus_routes": routes,
-        "messages": [
-            AIMessage(
-                content="🚌 Bus routes fetched successfully."
-            )
-        ],
+        "messages": [AIMessage(content=f"🚌 Bus routes found for {city}")],
         "llm_calls": state.get("llm_calls", 0) + 1,
     }
+
 
 # ─────────────────────────────────────────────
 # HOTEL AGENT
@@ -168,36 +101,28 @@ def hotel_agent(state: TravelState):
     city = state["selected_city"]
 
     query = f"""
-    Best budget hotels in {city} Pakistan.
-
-    Include:
-    - Tourist hotels
-    - Budget stays
-    - Family hotels
-    - Room prices
+    Best hotels in {city} Pakistan:
+    budget hotels, luxury hotels, family stays with prices
     """
 
     hotels = tavily_search(query)
 
     return {
         "hotel_results": hotels,
-        "messages": [
-            AIMessage(
-                content="🏨 Hotel recommendations fetched successfully."
-            )
-        ],
+        "messages": [AIMessage(content=f"🏨 Hotels found in {city}")],
         "llm_calls": state.get("llm_calls", 0) + 1,
     }
+
+
 # ─────────────────────────────────────────────
 # EXPENSE AGENT
 # ─────────────────────────────────────────────
 def expense_agent(state: TravelState):
 
     prompt = f"""
-    Estimate a Pakistan tourism trip budget.
+    Estimate travel cost in Pakistan.
 
-    Destination:
-    {state['selected_city']}
+    City: {state['selected_city']}
 
     Bus Routes:
     {state['bus_routes']}
@@ -206,33 +131,32 @@ def expense_agent(state: TravelState):
     {state['hotel_results']}
 
     Include:
-    - Bus expenses
-    - Hotel expenses
-    - Food expenses
-    - Local transport
+    - Transport cost
+    - Hotel cost
+    - Food cost
+    - Daily budget
 
-    Give estimated budget in PKR.
+    Return total in PKR.
     """
 
-    response = llm.invoke([
-        HumanMessage(content=prompt)
-    ])
+    response = llm.invoke([HumanMessage(content=prompt)])
 
     return {
         "estimated_budget": response.content,
         "messages": [response],
         "llm_calls": state.get("llm_calls", 0) + 1,
     }
+
+
 # ─────────────────────────────────────────────
 # ITINERARY AGENT
 # ─────────────────────────────────────────────
 def itinerary_agent(state: TravelState):
 
     prompt = f"""
-    Create a detailed Pakistan tourism itinerary.
+    Create a 6-day Pakistan travel itinerary.
 
-    Destination:
-    {state['selected_city']}
+    City: {state['selected_city']}
 
     Bus Routes:
     {state['bus_routes']}
@@ -244,18 +168,15 @@ def itinerary_agent(state: TravelState):
     {state['estimated_budget']}
 
     Include:
-    - Day-wise planning
-    - Tourist attractions
-    - Food recommendations
-    - Safety tips
-    - Travel advice
+    - Day-wise plan
+    - Attractions
+    - Food spots
+    - Travel tips
     """
 
     response = llm.invoke([
-        SystemMessage(
-            content="You are a Pakistan tourism expert"
-        ),
-        HumanMessage(content=prompt)
+        SystemMessage(content="You are a Pakistan travel expert"),
+        HumanMessage(content=prompt),
     ])
 
     return {
@@ -263,41 +184,33 @@ def itinerary_agent(state: TravelState):
         "messages": [response],
         "llm_calls": state.get("llm_calls", 0) + 1,
     }
+
+
 # ─────────────────────────────────────────────
 # FINAL AGENT
 # ─────────────────────────────────────────────
 def final_agent(state: TravelState):
 
-    final_response = f"""
-# 🇵🇰 Pakistan Tourism Plan
+    final = f"""
+🇵🇰 Pakistan Travel Plan
 
-## 📍 Destination
-{state['selected_city']}
+📍 City: {state['selected_city']}
 
----
-
-## 🚌 Bus Routes
+🚌 Bus Routes:
 {state['bus_routes']}
 
----
-
-## 🏨 Hotels
+🏨 Hotels:
 {state['hotel_results']}
 
----
-
-## 💰 Estimated Budget
+💰 Budget:
 {state['estimated_budget']}
 
----
-
-## 🗓️ Itinerary
+🗓️ Itinerary:
 {state['itinerary']}
 """
 
     return {
-        "messages": [
-            AIMessage(content=final_response)
-        ],
+        "final_response": final,
+        "messages": [AIMessage(content=final)],
         "llm_calls": state.get("llm_calls", 0) + 1,
     }

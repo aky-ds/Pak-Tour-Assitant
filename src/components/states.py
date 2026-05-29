@@ -11,5 +11,5 @@ class TravelState(TypedDict):
     bus_routes:str
     hotel_results:str
     estimated_budget:str
-    iterniary:str
+    itinerary:str
     llm_calls:int

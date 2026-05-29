@@ -1,3 +1,4 @@
+
 from langgraph.graph import (
     StateGraph,
     START,
@@ -6,32 +7,21 @@ from langgraph.graph import (
 
 from src.components.states import TravelState
 
-from nodes import (
+from src.components.nodes import (
     tourism_agent,
-    city_selection_agent,
     bus_route_agent,
     hotel_agent,
     expense_agent,
     itinerary_agent,
     final_agent,
 )
-# Router
-# Checks whether city already selected
 
-def city_router(state: TravelState):
+graph = StateGraph(TravelState)
 
-    if state.get("selected_city"):
-        return "bus_route_agent"
-
-    return "city_selection_agent"
-
-
-# Graph
-graph=StateGraph(TravelState)
-
+# Nodes
 graph.add_node(
-    "city_selection_agent",
-    city_selection_agent
+    "tourism_agent",
+    tourism_agent
 )
 
 graph.add_node(
@@ -59,20 +49,14 @@ graph.add_node(
     final_agent
 )
 
-# Flow
-
+# Entry Flow
 graph.add_edge(
     START,
     "tourism_agent"
 )
 
-graph.add_conditional_edges(
-    "tourism_agent",
-    city_router
-)
-
 graph.add_edge(
-    "city_selection_agent",
+    "tourism_agent",
     "bus_route_agent"
 )
 
@@ -101,5 +85,4 @@ graph.add_edge(
     END
 )
 
-
-app=graph.compile()
+app = graph.compile()
